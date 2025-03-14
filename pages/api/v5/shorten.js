@@ -7,30 +7,55 @@ export default async function handler(req, res) {
     const password = body.password
     const urlsArray = urls.split(/[\n,]+/)
 
-    const promises = urlsArray.map(async (url) => {
-      if (url === '') return null
+    console.log(`Processing URLs: ${JSON.stringify(urlsArray)}`);
+    
+    // Debug: Dump memory store before processing
+    await storage.dumpMemoryStore();
 
-      let keys = Array.from({length: 10}, () => Math.random().toString(36).substring(2, 5) + Math.random().toString(36).substring(2, 5))
-      let existingKeys = await Promise.all(keys.map(key => storage.get(key)))
-      let key = keys.find((key, index) => !existingKeys[index])
+    const results = [];
+    
+    for (const url of urlsArray) {
+      if (url === '') continue;
 
-      if (password !== "") {
-        key = key + "$" + password
+      // Generate a simple key
+      let key = Math.random().toString(36).substring(2, 5) + Math.random().toString(36).substring(2, 5);
+      
+      // Check if key exists
+      let keyExists = await storage.get(key);
+      
+      // Keep trying until we find an unused key
+      while (keyExists) {
+        key = Math.random().toString(36).substring(2, 5) + Math.random().toString(36).substring(2, 5);
+        keyExists = await storage.get(key);
       }
 
-      await storage.set(key, url)
+      // Add password if specified
+      if (password) {
+        key = key + "$" + password;
+      }
 
-      return {
+      console.log(`Storing URL: key=${key}, url=${url}`);
+      
+      // Store the URL
+      await storage.set(key, url);
+      
+      // Verify storage
+      const storedUrl = await storage.get(key);
+      console.log(`Verification - retrieved ${key}: ${storedUrl}`);
+
+      results.push({
         key: key.split("$")[0],
         url: url
-      }
-    })
+      });
+    }
 
-    const results = await Promise.all(promises)
-
-    res.status(200).json(results.filter(result => result !== null))
+    // Debug: Dump memory store after processing
+    await storage.dumpMemoryStore();
+    
+    console.log(`Returning results: ${JSON.stringify(results)}`);
+    res.status(200).json(results);
   } catch (error) {
-    console.error('Shorten handler error:', error)
-    res.status(500).json({ error: 'Internal Server Error' })
+    console.error('Shorten handler error:', error);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 }

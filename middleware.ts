@@ -5,6 +5,19 @@ export const config = {
   matcher: '/:path*',
 }
 
+// Debug function to print request details
+function logRequest(req: NextRequest) {
+  console.log(`
+Request:
+  - Method: ${req.method}
+  - URL: ${req.url}
+  - Path: ${req.nextUrl.pathname}
+  - Host: ${req.nextUrl.host}
+  - Origin: ${req.nextUrl.origin}
+  - Headers: ${JSON.stringify(Array.from(req.headers.entries()))}
+  `);
+}
+
 async function sendTelegramMessage(message: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -38,13 +51,23 @@ async function sendTelegramMessage(message: string) {
 
 export async function middleware(req: NextRequest) {
   try {
+    logRequest(req);
     const path = req.nextUrl.pathname.replace('/', '')
+    console.log(`Processing path: ${path}`);
 
-    if (!path) {
-      return NextResponse.next()
+    if (!path || path.includes('/api/') || path === 'favicon.ico') {
+      return NextResponse.next();
     }
 
-    let endURL = await storage.get(path)
+    // Debug: Dump memory store to see if URLs are stored
+    await storage.dumpMemoryStore();
+    
+    // Debug: List all keys in storage
+    const allKeys = await storage.keys();
+    console.log(`All keys in storage (${allKeys.length}): ${allKeys.join(', ')}`);
+
+    let endURL = await storage.get(path);
+    console.log(`Lookup result for ${path}: ${endURL}`);
 
     if (endURL) {
       // Send notification to Telegram
@@ -54,25 +77,28 @@ export async function middleware(req: NextRequest) {
 
       // if endURL missing http/https, add it
       if (!endURL.match(/^[a-zA-Z]+:\/\//)) {
-        endURL = 'http://' + endURL
+        endURL = 'http://' + endURL;
       }
-      return NextResponse.redirect(new URL(endURL))
-
+      
+      console.log(`Redirecting to: ${endURL}`);
+      return NextResponse.redirect(new URL(endURL));
     } else {
-      // Search for a secure key
-      let allKeys = await storage.keys('*')
-      let secureKey = allKeys.find((key) => key.startsWith(path))
+      // Check for secure keys with password
+      const secureKey = allKeys.find(key => key.startsWith(path) && key.includes('$'));
+      
       if (secureKey) {
-        return NextResponse.redirect(new URL(req.nextUrl.toString().replace('/' + path, '') + '/unlock?key=' + path.split('$')[0]))
-      }
-      else if (path.includes('$')) {
-        return NextResponse.redirect(new URL(req.nextUrl.toString().replace('/' + path, '') + '/unlock?key=' + path.split('$')[0] ))
+        console.log(`Found secure key: ${secureKey}`);
+        return NextResponse.redirect(new URL(`${req.nextUrl.origin}/unlock?key=${path.split('$')[0]}`));
+      } else if (path.includes('$')) {
+        console.log(`Path contains $: ${path}`);
+        return NextResponse.redirect(new URL(`${req.nextUrl.origin}/unlock?key=${path.split('$')[0]}`));
       }
 
-      return NextResponse.next()
+      console.log(`No URL found for ${path}, continuing to next middleware`);
+      return NextResponse.next();
     }
   } catch (error) {
-    console.error('Middleware error:', error)
-    return NextResponse.next()
+    console.error('Middleware error:', error);
+    return NextResponse.next();
   }
 }
