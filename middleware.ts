@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { kv } from "@vercel/kv"
+import storage from './utils/storage'
 
 export const config = {
   matcher: '/:path*',
@@ -8,6 +8,12 @@ export const config = {
 async function sendTelegramMessage(message: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
+  
+  if (!botToken || !chatId) {
+    console.warn('Telegram bot token or chat ID not set');
+    return;
+  }
+  
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
   try {
@@ -34,39 +40,35 @@ export async function middleware(req: NextRequest) {
   try {
     const path = req.nextUrl.pathname.replace('/', '')
 
-    let endURL = await kv.get(path)
+    if (!path) {
+      return NextResponse.next()
+    }
 
-    if (path) {
-      if (endURL) {
-        // Send notification to Telegram
-        const geo = req.geo || {};
-        const locationMessage = `Shortlink accessed: ${req.nextUrl.origin}/${path}\nLocation: ${geo.city}, ${geo.region}, ${geo.country}`;
-        await sendTelegramMessage(locationMessage);
+    let endURL = await storage.get(path)
 
-        // if endURL missing http/https, add it
-        if (!endURL.match(/^[a-zA-Z]+:\/\//)) {
-          endURL = 'http://' + endURL
-        }
-        return NextResponse.redirect(new URL(endURL))
+    if (endURL) {
+      // Send notification to Telegram
+      const geo = req.geo || {};
+      const locationMessage = `Shortlink accessed: ${req.nextUrl.origin}/${path}\nLocation: ${geo.city || 'Unknown'}, ${geo.region || 'Unknown'}, ${geo.country || 'Unknown'}`;
+      await sendTelegramMessage(locationMessage);
 
-      } else {
-
-        // Search for a secure key
-        let allKeys = []
-        for await (const key of kv.scanIterator()) {
-          allKeys.push(key)
-        }
-        let secureKey = allKeys.find((key) => key.startsWith(path))
-        if (secureKey) {
-          return NextResponse.redirect(new URL(req.nextUrl.toString().replace('/' + path, '') + '/unlock?key=' + path.split('$')[0]))
-        }
-        else if (path.includes('$')) {
-          return NextResponse.redirect(new URL(req.nextUrl.toString().replace('/' + path, '') + '/unlock?key=' + path.split('$')[0] ))
-        }
-
-        return NextResponse.next()
+      // if endURL missing http/https, add it
+      if (!endURL.match(/^[a-zA-Z]+:\/\//)) {
+        endURL = 'http://' + endURL
       }
+      return NextResponse.redirect(new URL(endURL))
+
     } else {
+      // Search for a secure key
+      let allKeys = await storage.keys('*')
+      let secureKey = allKeys.find((key) => key.startsWith(path))
+      if (secureKey) {
+        return NextResponse.redirect(new URL(req.nextUrl.toString().replace('/' + path, '') + '/unlock?key=' + path.split('$')[0]))
+      }
+      else if (path.includes('$')) {
+        return NextResponse.redirect(new URL(req.nextUrl.toString().replace('/' + path, '') + '/unlock?key=' + path.split('$')[0] ))
+      }
+
       return NextResponse.next()
     }
   } catch (error) {

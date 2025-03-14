@@ -18,7 +18,12 @@ export default function Home() {
     const domain = formData.get('domain')
 
     if (domain !== "") {
-      await fetch(`/api/v5/domain?add=${domain}`)
+      await fetch(`/api/v5/domain?add=${domain}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
         .then(res => {
           if (res.status === 403) {
             alert('You are not authorized to add this domain.')
@@ -46,12 +51,20 @@ export default function Home() {
 
     await fetch('/api/v5/shorten', {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         urls: urls,
         password: password
       })
     })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
       .then(data => {
         setResults(data)
         setLoading(false)
