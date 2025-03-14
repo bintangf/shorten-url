@@ -10,16 +10,24 @@ async function sendTelegramMessage(message: string) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-  await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: message,
-    }),
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Telegram API error: ${response.statusText}`);
+    }
+  } catch (error) {
+    console.error('Failed to send Telegram message:', error);
+  }
 }
 
 export async function middleware(req: NextRequest) {

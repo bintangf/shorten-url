@@ -6,51 +6,44 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
 
   // Handle form submit
-  const handleSubmit = async () => {
-    // Prevent
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
-    // Set loading
     setLoading(true)
 
-    // Get the form data
     const form = document.getElementById('form')
     const formData = new FormData(form)
     const urls = formData.get('urls')
     const password = formData.get('password')
     const domain = formData.get('domain')
-    const ref = formData.get('ref')
 
-    // GET /api/{API Version}/domain?add={domain}
     if (domain !== "") {
       await fetch(`/api/v5/domain?add=${domain}`)
-      .then(res => {
-        if (res.status === 403) {
-          alert('You are not authorized to add this domain.')
-        } else if (res.status === 409) {
-          alert('This domain/subdomain is already taken. Please remove it from your Vercel account and try again.')
-        } else if (res.status === 200) {
-          // check domain ip CNAME to cname.vercel-dns.com
-          fetch(`https://dns.google/resolve?name=${domain}&type=CNAME`)
-          .then(res => res.json())
-          .then(data => {
-            if ( (data.Answer && data.Answer[0].data === 'cname.vercel-dns.com.') || (data.Authority && data.Authority[0].name === 'vercel.app.') ) {
-            }
-            else {
-              alert('Domain/Subdomain added successfully. Please use CNAME and point to cname.vercel-dns.com.')
-            }
-          })
-        } else {
+        .then(res => {
+          if (res.status === 403) {
+            alert('You are not authorized to add this domain.')
+          } else if (res.status === 409) {
+            alert('This domain/subdomain is already taken. Please remove it from your Vercel account and try again.')
+          } else if (res.status === 200) {
+            fetch(`https://dns.google/resolve?name=${domain}&type=CNAME`)
+              .then(res => res.json())
+              .then(data => {
+                if ((data.Answer && data.Answer[0].data === 'cname.vercel-dns.com.') || (data.Authority && data.Authority[0].name === 'vercel.app.')) {
+                  // Domain is correctly configured
+                } else {
+                  alert('Domain/Subdomain added successfully. Please use CNAME and point to cname.vercel-dns.com.')
+                }
+              })
+          } else {
+            alert('Something went wrong, please try again later.')
+          }
+        })
+        .catch(err => {
+          console.error('Domain fetch error:', err)
           alert('Something went wrong, please try again later.')
-        }
-      })
-      .catch(err => {
-        console.error(err)
-        alert('Something went wrong, please try again later.')
-      })
+        })
     }
 
-    // POST to /api/{API Version}/shorten
     await fetch('/api/v5/shorten', {
       method: 'POST',
       body: JSON.stringify({
@@ -58,16 +51,16 @@ export default function Home() {
         password: password
       })
     })
-    .then(res => res.json())
-    .then(data => {
-      setResults(data)
-      setLoading(false)
-    })
-    .catch(err => {
-      console.error(err)
-      alert('Something went wrong, please try again later.')
-      setLoading(false)
-    })
+      .then(res => res.json())
+      .then(data => {
+        setResults(data)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error('Shorten fetch error:', err)
+        alert('Something went wrong, please try again later.')
+        setLoading(false)
+      })
   }
 
   // Download results as CSV
